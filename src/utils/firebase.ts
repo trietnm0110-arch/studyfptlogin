@@ -1,5 +1,5 @@
 import { initializeApp, getApps } from 'firebase/app';
-import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check';
+import { initializeAppCheck, ReCaptchaEnterpriseProvider } from 'firebase/app-check';
 import {
   createUserWithEmailAndPassword,
   getAuth,
@@ -36,7 +36,7 @@ if (firebaseApp && (import.meta.env.DEV || appCheckSiteKey)) {
       .FIREBASE_APPCHECK_DEBUG_TOKEN = true;
   }
   initializeAppCheck(firebaseApp, {
-    provider: new ReCaptchaV3Provider(appCheckSiteKey ?? ''),
+    provider: new ReCaptchaEnterpriseProvider(appCheckSiteKey ?? ''),
     isTokenAutoRefreshEnabled: true,
   });
 }
