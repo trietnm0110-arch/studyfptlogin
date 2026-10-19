@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Subject, WeeklyReflection } from '../types';
+import { generateWeeklyStudyAdvice } from '../utils/studyCoach';
 import {
   X,
   Star,
@@ -46,6 +47,9 @@ export const ReflectionModal: React.FC<ReflectionModalProps> = ({
   const [adjustmentsForNextWeek, setAdjustmentsForNextWeek] = useState<string>('');
   const [keyTakeaway, setKeyTakeaway] = useState<string>('');
   const [error, setError] = useState<string>('');
+  const [aiAdvice, setAiAdvice] = useState<string>('');
+  const [aiError, setAiError] = useState<string>('');
+  const [isGeneratingAdvice, setIsGeneratingAdvice] = useState(false);
 
   if (!isOpen) return null;
 
@@ -83,6 +87,38 @@ export const ReflectionModal: React.FC<ReflectionModalProps> = ({
         color: s.color,
       })),
     };
+  };
+
+  const handleGenerateAdvice = async () => {
+    setAiError('');
+    setIsGeneratingAdvice(true);
+    try {
+      const advice = await generateWeeklyStudyAdvice({
+        weekNumber: currentWeekNumber,
+        rating,
+        totalHours: totalHoursStudied,
+        budgetHours: totalBudgetHours,
+        mostTimeConsumingSubject,
+        obstacle: biggestObstacle,
+        subjects: subjects.map((subject) => ({
+          code: subject.code,
+          name: subject.name,
+          spentHours: Math.round((subject.spentMinutes / 60) * 10) / 10,
+          budgetHours: subject.weeklyBudgetHours,
+        })),
+      });
+      setAiAdvice(advice);
+    } catch (cause) {
+      console.error('Failed to generate weekly study advice', cause);
+      const message = cause instanceof Error ? cause.message : '';
+      setAiError(
+        message.includes('App Check')
+          ? 'App Check chưa chấp nhận trình duyệt này. Hãy đăng ký debug token trong Firebase Console > App Check > Apps, rồi tải lại trang.'
+          : 'Chưa tạo được gợi ý. Kiểm tra Firebase AI Logic đã bật và thử lại.'
+      );
+    } finally {
+      setIsGeneratingAdvice(false);
+    }
   };
 
   const handleSaveAndReset = () => {
@@ -167,6 +203,42 @@ export const ReflectionModal: React.FC<ReflectionModalProps> = ({
               ))}
             </div>
           </div>
+
+          <section className="space-y-3 rounded-xl border border-orange-200 bg-orange-50/70 p-4 dark:border-orange-900/60 dark:bg-orange-950/20" aria-live="polite">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h3 className="flex items-center gap-1.5 text-sm font-bold text-slate-900 dark:text-white">
+                  <Sparkles className="h-4 w-4 text-orange-600 dark:text-orange-400" />
+                  Gợi ý học tập từ AI
+                </h3>
+                <p className="mt-1 text-xs text-slate-600 dark:text-slate-400">
+                  Phân tích giờ học, mục tiêu và phần tự đánh giá của bạn.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleGenerateAdvice}
+                disabled={isGeneratingAdvice}
+                className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-orange-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-orange-700 disabled:cursor-wait disabled:opacity-60"
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                {isGeneratingAdvice ? 'Đang phân tích...' : aiAdvice ? 'Phân tích lại' : 'Phân tích tuần'}
+              </button>
+            </div>
+            {aiError && <p role="alert" className="text-xs font-medium text-red-700 dark:text-red-300">{aiError}</p>}
+            {aiAdvice && (
+              <div className="space-y-3 border-t border-orange-200 pt-3 dark:border-orange-900/60">
+                <p className="whitespace-pre-wrap text-xs leading-5 text-slate-700 dark:text-slate-200">{aiAdvice}</p>
+                <button
+                  type="button"
+                  onClick={() => setAdjustmentsForNextWeek(aiAdvice)}
+                  className="text-xs font-bold text-orange-700 underline decoration-orange-300 underline-offset-2 hover:text-orange-800 dark:text-orange-300 dark:hover:text-orange-200"
+                >
+                  Dùng gợi ý làm kế hoạch tuần tới
+                </button>
+              </div>
+            )}
+          </section>
 
           {/* 1. Star Rating: Satisfaction & Focus */}
           <div>

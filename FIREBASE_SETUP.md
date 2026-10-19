@@ -17,4 +17,7 @@ service cloud.firestore {
 
 4. Restart the Vite server after adding `.env.local`. Email/password sign-in and cloud sync work with the web config. For Android Google sign-in, also register the Android app in Firebase and configure its SHA fingerprints and Google OAuth client as described in Firebase's Android setup guide.
 
+5. To use AI study suggestions, open **AI Services > AI Logic** in Firebase Console and complete **Get started**, selecting the Gemini Developer API. The app uses Firebase AI Logic and does not need a Gemini API key in `.env.local`.
+6. For local development, the app enables the App Check debug provider automatically. Open the browser developer console, copy the generated App Check debug token, and register it in Firebase Console under **App Check > Apps > Manage debug tokens**. Keep this token private and never commit it. For production, configure a reCAPTCHA v3 provider in App Check and set its site key as `VITE_FIREBASE_APPCHECK_SITE_KEY`.
+
 Existing local data is preserved. On first sign-in, if that account has no cloud data, current device data is uploaded. Later sign-ins load that account's cloud data and changes are synchronized automatically. Data from a different previously signed-in account is not copied into a new account.

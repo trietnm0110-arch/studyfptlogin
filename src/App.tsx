@@ -584,7 +584,7 @@ export default function App() {
               }`}
             >
               <BarChart3 className="w-4 h-4" />
-              Tiến độ tuần & Tự đánh giá
+              Tiến độ tuần & đánh giá
             </button>
           </div>
 

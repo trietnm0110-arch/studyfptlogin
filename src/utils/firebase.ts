@@ -1,4 +1,5 @@
 import { initializeApp, getApps } from 'firebase/app';
+import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check';
 import {
   createUserWithEmailAndPassword,
   getAuth,
@@ -24,9 +25,21 @@ const firebaseConfig = {
 
 export const firebaseConfigured = Object.values(firebaseConfig).every(Boolean);
 
-const firebaseApp = firebaseConfigured
+export const firebaseApp = firebaseConfigured
   ? getApps()[0] ?? initializeApp(firebaseConfig)
   : undefined;
+
+const appCheckSiteKey = import.meta.env.VITE_FIREBASE_APPCHECK_SITE_KEY;
+if (firebaseApp && (import.meta.env.DEV || appCheckSiteKey)) {
+  if (import.meta.env.DEV) {
+    (globalThis as typeof globalThis & { FIREBASE_APPCHECK_DEBUG_TOKEN?: boolean })
+      .FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+  }
+  initializeAppCheck(firebaseApp, {
+    provider: new ReCaptchaV3Provider(appCheckSiteKey ?? ''),
+    isTokenAutoRefreshEnabled: true,
+  });
+}
 
 export const auth = firebaseApp ? getAuth(firebaseApp) : undefined;
 const database = firebaseApp ? getFirestore(firebaseApp) : undefined;
