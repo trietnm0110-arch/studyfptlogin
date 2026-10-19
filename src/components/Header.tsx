@@ -8,7 +8,9 @@ import {
   Sparkles,
   History,
   Clock,
+  UserRound,
 } from 'lucide-react';
+import type { User } from 'firebase/auth';
 
 interface HeaderProps {
   currentWeekNumber: number;
@@ -19,6 +21,8 @@ interface HeaderProps {
   onOpenReflection: () => void;
   onOpenHistory: () => void;
   hasPastReflections: boolean;
+  user: User | null;
+  onOpenAccount: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -30,6 +34,8 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenReflection,
   onOpenHistory,
   hasPastReflections,
+  user,
+  onOpenAccount,
 }) => {
   return (
     <header className="sticky top-0 z-30 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800">
@@ -56,6 +62,16 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Center / Right controls */}
         <div className="flex items-center gap-2 sm:gap-3">
+          <button
+            onClick={onOpenAccount}
+            title={user ? `Tài khoản: ${user.email}` : 'Đăng nhập và đồng bộ dữ liệu'}
+            aria-label="Tài khoản và đồng bộ"
+            className="flex max-w-40 items-center gap-2 rounded-xl border border-slate-200 px-2.5 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+          >
+            <UserRound className="h-4 w-4 shrink-0 text-orange-600 dark:text-orange-400" />
+            <span className="hidden truncate sm:inline">{user?.displayName || (user ? 'Tài khoản' : 'Đăng nhập')}</span>
+          </button>
+
           {/* Week Badge */}
           <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-800/80 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200 border border-slate-200/60 dark:border-slate-700/60">
             <Calendar className="w-3.5 h-3.5 text-orange-600 dark:text-orange-400" />

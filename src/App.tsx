@@ -3,7 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import type { User } from 'firebase/auth';
 import {
   Subject,
   TaskItem,
@@ -30,6 +31,8 @@ import { WeeklyAnalytics } from './components/WeeklyAnalytics';
 import { ReflectionModal } from './components/ReflectionModal';
 import { HistoryModal } from './components/HistoryModal';
 import { SettingsModal } from './components/SettingsModal';
+import { AccountModal } from './components/AccountModal';
+import { firebaseConfigured, loadStudyData, saveStudyData, subscribeToAuth } from './utils/firebase';
 import {
   CalendarDays,
   BookOpen,
@@ -51,6 +54,11 @@ export default function App() {
     StorageService.getReflections()
   );
   const [settings, setSettings] = useState<AppSettings>(() => StorageService.getSettings());
+  const [user, setUser] = useState<User | null>(null);
+  const [authReady, setAuthReady] = useState(!firebaseConfigured);
+  const [dataReady, setDataReady] = useState(!firebaseConfigured);
+  const [cloudOwner, setCloudOwner] = useState<string | null>(null);
+  const activeUserId = useRef<string | null>(null);
 
   // Active view / tabs
   const [activeTab, setActiveTab] = useState<'timetable' | 'subjects' | 'timer' | 'tasks' | 'analytics'>('timetable');
@@ -61,6 +69,7 @@ export default function App() {
   const [isReflectionModalOpen, setIsReflectionModalOpen] = useState(false);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
 
   // Selected subject for timer
   const [selectedSubjectId, setSelectedSubjectId] = useState<string>(
@@ -77,35 +86,109 @@ export default function App() {
     }, 2800);
   };
 
-  // Synchronize state changes to localStorage
   useEffect(() => {
+    if (!firebaseConfigured) return;
+    return subscribeToAuth((nextUser) => {
+      if (activeUserId.current && !nextUser) {
+        setSubjects(FPTU_SAMPLE_SUBJECTS);
+        setTimetable(FPTU_SAMPLE_TIMETABLE);
+        setTasks(FPTU_SAMPLE_TASKS);
+        setSessions([]);
+        setReflections([]);
+        setSettings(DEFAULT_SETTINGS);
+      }
+      activeUserId.current = nextUser?.uid ?? null;
+      setUser(nextUser);
+      setAuthReady(true);
+      setDataReady(!nextUser);
+      setCloudOwner(null);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    setDataReady(false);
+    loadStudyData(user.uid)
+      .then((cloudData) => {
+        if (cancelled) return;
+        const previousOwner = localStorage.getItem('fptu_study_cloud_owner');
+        if (cloudData) {
+          setSubjects(cloudData.subjects ?? FPTU_SAMPLE_SUBJECTS);
+          setTimetable(cloudData.timetable ?? FPTU_SAMPLE_TIMETABLE);
+          setTasks(cloudData.tasks ?? FPTU_SAMPLE_TASKS);
+          setSessions(cloudData.sessions ?? []);
+          setReflections(cloudData.reflections ?? []);
+          setSettings({ ...DEFAULT_SETTINGS, ...cloudData.settings });
+        } else if (previousOwner && previousOwner !== user.uid) {
+          setSubjects(FPTU_SAMPLE_SUBJECTS);
+          setTimetable(FPTU_SAMPLE_TIMETABLE);
+          setTasks(FPTU_SAMPLE_TASKS);
+          setSessions([]);
+          setReflections([]);
+          setSettings(DEFAULT_SETTINGS);
+        }
+        localStorage.setItem('fptu_study_cloud_owner', user.uid);
+        setCloudOwner(user.uid);
+        setDataReady(true);
+      })
+      .catch((error: unknown) => {
+        console.error('Failed to load cloud study data', error);
+        if (!cancelled) {
+          setDataReady(true);
+          showToast('Không tải được dữ liệu đám mây. Kiểm tra cấu hình Firebase.');
+        }
+      });
+    return () => { cancelled = true; };
+  }, [user]);
+
+  // Keep local persistence and cloud synchronization behind account data hydration.
+  useEffect(() => {
+    if (!authReady || !dataReady) return;
     StorageService.saveSubjects(subjects);
-  }, [subjects]);
+  }, [subjects, authReady, dataReady]);
 
   useEffect(() => {
+    if (!authReady || !dataReady) return;
     StorageService.saveTimetable(timetable);
-  }, [timetable]);
+  }, [timetable, authReady, dataReady]);
 
   useEffect(() => {
+    if (!authReady || !dataReady) return;
     StorageService.saveTasks(tasks);
-  }, [tasks]);
+  }, [tasks, authReady, dataReady]);
 
   useEffect(() => {
+    if (!authReady || !dataReady) return;
     StorageService.saveSessions(sessions);
-  }, [sessions]);
+  }, [sessions, authReady, dataReady]);
 
   useEffect(() => {
+    if (!authReady || !dataReady) return;
     StorageService.saveReflections(reflections);
-  }, [reflections]);
+  }, [reflections, authReady, dataReady]);
 
   useEffect(() => {
+    if (!authReady || !dataReady) return;
     StorageService.saveSettings(settings);
     if (settings.darkMode) {
       document.documentElement.classList.add('dark');
     } else {
       document.documentElement.classList.remove('dark');
     }
-  }, [settings]);
+  }, [settings, authReady, dataReady]);
+
+  useEffect(() => {
+    if (!user || !dataReady || cloudOwner !== user.uid) return;
+    const timeout = window.setTimeout(() => {
+      saveStudyData(user.uid, { subjects, timetable, tasks, sessions, reflections, settings })
+        .catch((error: unknown) => {
+          console.error('Failed to sync study data', error);
+          showToast('Đồng bộ thất bại. Dữ liệu vẫn được lưu trên thiết bị.');
+        });
+    }, 500);
+    return () => window.clearTimeout(timeout);
+  }, [user, dataReady, cloudOwner, subjects, timetable, tasks, sessions, reflections, settings]);
 
   // Keep selected subject valid
   useEffect(() => {
@@ -405,6 +488,14 @@ export default function App() {
       ? Math.round((totalSpentHours / totalBudgetHours) * 100)
       : 0;
 
+  if (!authReady || (user && !dataReady)) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 text-sm font-semibold text-slate-600 dark:bg-slate-950 dark:text-slate-300">
+        Đang tải tài khoản và dữ liệu học tập...
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 flex flex-col font-sans transition-colors duration-200">
       {/* Toast Notification */}
@@ -427,6 +518,8 @@ export default function App() {
         onOpenReflection={() => setIsReflectionModalOpen(true)}
         onOpenHistory={() => setIsHistoryModalOpen(true)}
         hasPastReflections={reflections.length > 0}
+        user={user}
+        onOpenAccount={() => setIsAccountModalOpen(true)}
       />
 
       {/* Main Container */}
@@ -677,7 +770,7 @@ export default function App() {
             FPTU Study Budget & Time Tracker · Ứng dụng quản lý thời gian học 5 Slot cho sinh viên FPT
           </div>
           <div className="flex items-center gap-3">
-            <span>Dữ liệu lưu an toàn trên máy (localStorage)</span>
+            <span>{user ? 'Đã bật đồng bộ đám mây' : 'Dữ liệu lưu trên thiết bị'}</span>
             <span>·</span>
             <button
               onClick={() => setIsSettingsModalOpen(true)}
@@ -728,6 +821,12 @@ export default function App() {
         subjects={subjects}
         timetable={timetable}
         tasks={tasks}
+      />
+
+      <AccountModal
+        isOpen={isAccountModalOpen}
+        user={user}
+        onClose={() => setIsAccountModalOpen(false)}
       />
     </div>
   );
